@@ -101,15 +101,6 @@ int main(void) {
         // Remove leading and trailing whitespace from the line
         stripwhite(line);
 
-        // if (child_status_changed == 1) { // if a background process terminated
-        //     child_status_changed = 0;
-        //     int status;
-        //     pid_t pid;
-        //     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) { // wait background processes without blocking and remove from background pid list
-        //         remove_bg_pid(pid);
-        //     }
-        // }
-
         // If the stripped line is not blank
         if (*line) {
             add_history(line);
@@ -190,9 +181,10 @@ static void pipeCmd(Pgm* p, Command* cmd, int fdWrite, pid_t* pids, int backgrou
             perror("fork failed");
             exit(1);
         } else if (pid == 0) {
-            if (!background) {
-                signal(SIGINT, SIG_DFL);
+            if (background) {
+                setpgid(0, 0);
             }
+            signal(SIGINT, SIG_DFL);
 
             // printChild(p->pgmlist);
             dup2(fdWrite, STDOUT_FILENO); // "dup2 closes arg2 automatically according to manual
