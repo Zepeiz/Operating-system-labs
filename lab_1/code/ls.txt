@@ -1,0 +1,9 @@
+build
+CMakeLists.txt
+ls.txt
+lsh.c
+parse.c
+parse.h
+README.md
+test
+test.c
