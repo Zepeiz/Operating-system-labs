@@ -343,18 +343,18 @@ static void run_pgm(Command* cmd) {
             if (pid < 0) {
                 perror("fork failed");
             } else if (pid == 0) {
-                if (!background) {
-                    signal(SIGINT, SIG_DFL);
+                if (background) {
+                    setpgid(0, 0); // set child to own group
                 }
+                signal(SIGINT, SIG_DFL);
+
                 // printChild(p->pgmlist);
                 if (cmd->rstdin != NULL) {
-                    // apply_redirection(cmd->rstdin, STDIN_FILENO, O_RDONLY, 0);
                     int filein = open(cmd->rstdin, S_IRUSR);
                     dup2(filein, STDIN_FILENO);
                     safeClose(filein);
                 }
                 if (cmd->rstdout != NULL) {
-                    // apply_redirection(cmd->rstdout, STDOUT_FILENO, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
                     int fileout = open(cmd->rstdout, O_CREAT | O_RDWR, S_IRWXU);
                     dup2(fileout, STDOUT_FILENO);
