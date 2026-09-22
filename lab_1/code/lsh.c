@@ -198,6 +198,7 @@ static void pipeCmd(Pgm* p, Command* cmd, int fdWrite, pid_t* pids, int backgrou
             }
             if (execvp(p->pgmlist[0], p->pgmlist) == -1) { // execvp search program by name
                 perror(p->pgmlist[0]);
+                exit(1);
             }
 
         } else {
@@ -218,7 +219,7 @@ static void pipeCmd(Pgm* p, Command* cmd, int fdWrite, pid_t* pids, int backgrou
         if (pipe(fd) == -1) {
             // fprintf(stderr, "Pipe failed");
             perror("pipe failed");
-            exit(0);
+            exit(1);
         }
         pipeCmd(p->next, cmd, fd[WRITE_END], pids, background, npids);
 
@@ -244,7 +245,11 @@ static void pipeCmd(Pgm* p, Command* cmd, int fdWrite, pid_t* pids, int backgrou
                 dup2(fileout, STDOUT_FILENO);
                 safeClose(fileout);
             }
-            execvp(p->pgmlist[0], p->pgmlist);
+            if (execvp(p->pgmlist[0], p->pgmlist) == -1) { // execvp search program by name
+                perror(p->pgmlist[0]);
+                exit(1);
+            }
+
         } else {
             if (!background) {
                 pids[(*npids)++] = pid;
