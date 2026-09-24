@@ -36,19 +36,18 @@
 #include "parse.h"
 
 // check zombies on mac: ps axo pid=,stat= | awk '$2 ~ /Z/'
-// TODO: ctrl D, ctrl C, file redirection, cd and exit builtin functions
 
 static void print_cmd(Command* cmd);
 static void print_pgm(Pgm* p);
 static void run_pgm(Command* cmd);
 void stripwhite(char*);
-static void printChild(char** list);
+// static void printChild(char** list);
 static void pipeCmd(Pgm* p, Command* cmd, int fdWrite, pid_t* pids, int background, int* npids);
 static void safeClose(int fd);
 static int count_pgms(Pgm* p);
 void sigchildHandler();
 static void add_bg_pid(pid_t pid);
-static void remove_bg_pid(pid_t pid);
+static void remove_bg_pid();
 
 // builtin
 static int handle_builtin(Pgm* p);
@@ -57,10 +56,10 @@ static char* global_dir;
 
 volatile sig_atomic_t child_status_changed = 0; // global
 #define MAX_BACKGROUND_PROCESS 10
-static pid_t bg_pids[MAX_BACKGROUND_PROCESS];
-static int nbg = 0;
+static pid_t bg_pids[MAX_BACKGROUND_PROCESS]; // list to manage background processes
+static int nbg = 0; // number of background processes
 
-static void add_bg_pid(pid_t pid) {
+static void add_bg_pid(pid_t pid) { // 0 represents free slot, stores pid of background process
     for (int i = 0; i < MAX_BACKGROUND_PROCESS; i++) {
         if (bg_pids[i] == 0) {
             bg_pids[i] = pid;
@@ -72,19 +71,25 @@ static void add_bg_pid(pid_t pid) {
     fprintf(stderr, "too many background jobs\n");
 }
 
-static void remove_bg_pid(pid_t pid) {
+static void remove_bg_pid() {
+    int status;
     for (int i = 0; i < MAX_BACKGROUND_PROCESS; i++) {
-        if (bg_pids[i] == pid) {
-            bg_pids[i] = 0;
-            nbg--;
-            printf("background process exited: %d\n", pid);
-            return;
+        pid_t pid = bg_pids[i];
+
+        if (pid > 0) {
+            pid_t result = waitpid(pid, &status, WNOHANG);
+
+            if (result == pid) {
+                bg_pids[i] = 0;
+                nbg--;
+                printf("background process exited: %d\n", pid);
+            }
         }
     }
 }
 
 int main(void) {
-    signal(SIGCHLD, sigchildHandler);
+    signal(SIGCHLD, sigchildHandler); // signal when any child terminates
     signal(SIGINT, SIG_IGN); // ignore ctrl C termination in main process and restore if its foreground.
     if ((global_dir = get_dir()) == NULL) {
         perror("Error reading directory path.");
@@ -167,7 +172,7 @@ static void print_pgm(Pgm* p) {
 #define READ_END 0
 #define WRITE_END 1
 
-static void safeClose(int fd) {
+static void safeClose(int fd) { // close every fd except the standard ones since it may cause seg fault if tries to print to closed fd
     if (!(fd == STDIN_FILENO || fd == STDOUT_FILENO)) {
         close(fd);
     }
@@ -192,7 +197,7 @@ static void pipeCmd(Pgm* p, Command* cmd, int fdWrite, pid_t* pids, int backgrou
             dup2(fdWrite, STDOUT_FILENO); // "dup2 closes arg2 automatically according to manual
             safeClose(fdWrite);
 
-            if (cmd->rstdin != NULL) { // <
+            if (cmd->rstdin != NULL) { // '<' i/o redirection, the first pgm in a piped case does make sense to write to a file
                 int filein = open(cmd->rstdin, O_RDONLY, S_IRUSR); // read only
                 dup2(filein, STDIN_FILENO);
                 safeClose(filein);
@@ -214,7 +219,8 @@ static void pipeCmd(Pgm* p, Command* cmd, int fdWrite, pid_t* pids, int backgrou
         }
         return;
 
-    } else {
+    } else { // recursive case
+        // piping should be done before recursing to next pgm since we have to pass in the write end of the pipe to the next pgm (the one that executes first since list is reversed)
         int fd[2];
 
         if (pipe(fd) == -1) {
@@ -224,6 +230,7 @@ static void pipeCmd(Pgm* p, Command* cmd, int fdWrite, pid_t* pids, int backgrou
         }
         pipeCmd(p->next, cmd, fd[WRITE_END], pids, background, npids);
 
+        // fork after since otherwise recursion would be run by the child.
         pid_t pid = fork();
 
         if (pid < 0) {
@@ -240,7 +247,7 @@ static void pipeCmd(Pgm* p, Command* cmd, int fdWrite, pid_t* pids, int backgrou
             safeClose(fd[READ_END]); // and doesn't need the original fd[1] number anymore either, since fd 1 already aliases it
             safeClose(fdWrite);
 
-            if (cmd->rstdout != NULL) { // >
+            if (cmd->rstdout != NULL) { // '>', itermediate pgms in piped scenario does not make sense to read to file, they need to be reading from pipe.
 
                 int fileout = open(cmd->rstdout, O_CREAT | O_RDWR, S_IRWXU); // write only
                 dup2(fileout, STDOUT_FILENO);
@@ -274,7 +281,7 @@ static int count_pgms(Pgm* p) {
     return n;
 }
 
-static int handle_builtin(Pgm* p) {
+static int handle_builtin(Pgm* p) { // returns 1 if ran p as a built in function, 0 otherwise
     char** argv = p->pgmlist;
 
     // cd
@@ -348,7 +355,7 @@ static void run_pgm(Command* cmd) {
                 if (background) {
                     setpgid(0, 0); // set child to own group
                 }
-                signal(SIGINT, SIG_DFL);
+                signal(SIGINT, SIG_DFL); // set to not ignore SIGINT, since base shell set to ignore
 
                 // printChild(p->pgmlist);
                 if (cmd->rstdin != NULL) {
@@ -397,23 +404,9 @@ static void run_pgm(Command* cmd) {
     }
 }
 
-void sigchildHandler() {
+void sigchildHandler() { // handles reaping of background processes
     int saved_errno = errno;
-    int status;
-
-    for (int i = 0; i < MAX_BACKGROUND_PROCESS; i++) {
-        pid_t pid = bg_pids[i];
-
-        if (pid > 0) {
-            pid_t result = waitpid(pid, &status, WNOHANG);
-
-            if (result == pid) {
-                bg_pids[i] = 0;
-                nbg--;
-                printf("background process exited: %d\n", pid);
-            }
-        }
-    }
+    remove_bg_pid();
 
     errno = saved_errno;
 }
