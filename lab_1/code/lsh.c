@@ -46,7 +46,7 @@ static void printChild(char** list);
 static void pipeCmd(Pgm* p, Command* cmd, int fdWrite, pid_t* pids, int background, int* npids);
 static void safeClose(int fd);
 static int count_pgms(Pgm* p);
-void sigchildHandler(int sig);
+void sigchildHandler();
 static void add_bg_pid(pid_t pid);
 static void remove_bg_pid(pid_t pid);
 
@@ -86,7 +86,10 @@ static void remove_bg_pid(pid_t pid) {
 int main(void) {
     signal(SIGCHLD, sigchildHandler);
     signal(SIGINT, SIG_IGN); // ignore ctrl C termination in main process and restore if its foreground.
-    global_dir = get_dir();
+    if ((global_dir = get_dir()) == NULL) {
+        perror("Error reading directory path.");
+    }
+
     for (;;) {
 
         printf("%s ", global_dir);
@@ -110,7 +113,6 @@ int main(void) {
             if (parse(line, &cmd) == 1) {
                 // Print the parsed command
                 print_cmd(&cmd);
-                Pgm* program = cmd.pgm;
                 run_pgm(&cmd);
             } else {
                 printf("Parse ERROR\n");
@@ -191,7 +193,6 @@ static void pipeCmd(Pgm* p, Command* cmd, int fdWrite, pid_t* pids, int backgrou
             safeClose(fdWrite);
 
             if (cmd->rstdin != NULL) { // <
-                // apply_redirection(cmd->rstdin, STDIN_FILENO, O_RDONLY, 0);
                 int filein = open(cmd->rstdin, O_RDONLY, S_IRUSR); // read only
                 dup2(filein, STDIN_FILENO);
                 safeClose(filein);
@@ -294,7 +295,10 @@ static int handle_builtin(Pgm* p) {
         if (chdir(dir) == -1) {
             perror("cd");
         } else {
-            global_dir = get_dir();
+
+            if ((global_dir = get_dir()) == NULL) {
+                perror("Error reading directory path");
+            }
         }
 
         return 1;
@@ -316,6 +320,7 @@ static char* get_dir() {
         return cwd;
     } else {
         perror("getcwd");
+        return 0;
     }
 }
 
@@ -392,7 +397,7 @@ static void run_pgm(Command* cmd) {
     }
 }
 
-void sigchildHandler(int sig) {
+void sigchildHandler() {
     int saved_errno = errno;
     int status;
 
@@ -412,6 +417,7 @@ void sigchildHandler(int sig) {
 
     errno = saved_errno;
 }
+/* unused helper function
 
 static void printChild(char** programList) {
     // printf("%lu\n", sizeof(programList));
@@ -429,6 +435,7 @@ static void printChild(char** programList) {
     }
     printf("\n");
 }
+*/
 
 /* Strip whitespace from the start and end of a string.
  *
