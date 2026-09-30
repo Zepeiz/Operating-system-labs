@@ -95,6 +95,8 @@ void
 //   while (timer_elapsed (start) < ticks)
 //     thread_yield ();
 // }
+
+//without busy waiting since no more while loop, and blocking the thread instead of yield.
 timer_sleep (int64_t ticks){
     if(ticks <= 0){
         return;
@@ -110,8 +112,8 @@ timer_sleep (int64_t ticks){
 }
 
 static void
-wake_if_ready (struct thread *t, void *aux UNUSED){
-    if(t->status == THREAD_BLOCKED && timer_ticks() >= t->wake_tick){
+wake_if_ready (struct thread *t, void *aux UNUSED){ //called by timer_interrupt each tick
+    if(t->status == THREAD_BLOCKED && timer_ticks() >= t->wake_tick && t->wake_tick > 0){
         t->wake_tick = 0;
         thread_unblock(t);
     }
