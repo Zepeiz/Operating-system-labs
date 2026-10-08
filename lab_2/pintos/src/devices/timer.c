@@ -195,7 +195,9 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  enum intr_level old = intr_disable();
   thread_foreach(wake_if_ready, NULL);
+  intr_set_level(old);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
