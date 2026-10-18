@@ -82,7 +82,7 @@ static struct lock bus_lock;
 static struct condition cond[NUM_OF_PRIORITIES]; /* indexed by priority_t */
 static int active;
 static direction_t bus_dir;
-static int waiting_dir[NUM_OF_DIRECTIONS];
+static int waiting_priority_tasks[NUM_OF_DIRECTIONS];
 
 void init_bus(void) {
 
@@ -94,8 +94,8 @@ void init_bus(void) {
     cond_init(&cond[NORMAL]);
     cond_init(&cond[PRIORITY]);
     active = 0;
-    waiting_dir[SEND] = 0;
-    waiting_dir[RECEIVE] = 0;
+    waiting_priority_tasks[SEND] = 0;
+    waiting_priority_tasks[RECEIVE] = 0;
 }
 
 void batch_scheduler(unsigned int num_priority_send,
@@ -202,11 +202,17 @@ void get_slot(const task_t* task) {
      * even if there are priority tasks of the other direction waiting
      */
     lock_acquire(&bus_lock);
+
+    if(task->priority == PRIORITY){
+        waiting_priority_tasks[task->direction]++;
+    }
 \
     while (!can_enter(task)) {
-        waiting_dir[task->direction]++;
         cond_wait(&cond[task->priority], &bus_lock); // 0 = normal, 1 = priority
-        waiting_dir[task->direction]--;
+
+    }
+    if(task->priority == PRIORITY){
+        waiting_priority_tasks[task->direction]--;
     }
     active++;
     bus_dir = task->direction;
@@ -229,7 +235,7 @@ void release_slot(const task_t* task) {
     lock_acquire(&bus_lock);
     active--;
 
-    if (waiting_dir[SEND] + waiting_dir[RECEIVE] > 0)
+    if (waiting_priority_tasks[SEND] + waiting_priority_tasks[RECEIVE] > 0)
         cond_broadcast(&cond[PRIORITY], &bus_lock);
     else
         cond_broadcast(&cond[NORMAL], &bus_lock);
@@ -242,7 +248,7 @@ static bool can_enter(const task_t* task) {
         return false;
     if (active > 0 && bus_dir != task->direction)
         return false;
-    if (task->priority == NORMAL && (waiting_dir[SEND] + waiting_dir[RECEIVE]) > 0)
+    if (task->priority == NORMAL && (waiting_priority_tasks[SEND] + waiting_priority_tasks[RECEIVE]) > 0)
         return false;
-    return true;
+    return true; //normal tasks enters only when no more prio tasks left
 }
