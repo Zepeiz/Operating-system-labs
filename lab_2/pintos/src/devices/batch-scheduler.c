@@ -244,9 +244,9 @@ void release_slot(const task_t* task) {
 }
 
 static bool can_enter(const task_t* task) {
-    if (active >= BUS_CAPACITY)
+    if (active >= BUS_CAPACITY) //no more than 3 tasks at once
         return false;
-    if (active > 0 && bus_dir != task->direction)
+    if (active > 0 && bus_dir != task->direction) //all active tasks must follow the same direction
         return false;
     if (task->priority == NORMAL && (waiting_priority_tasks[SEND] + waiting_priority_tasks[RECEIVE]) > 0)
         return false;
