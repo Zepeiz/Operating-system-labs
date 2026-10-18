@@ -203,7 +203,7 @@ void get_slot(const task_t* task) {
      */
     lock_acquire(&bus_lock);
 \
-    while (!can_enter(&task)) {
+    while (!can_enter(task)) {
         waiting_dir[task->direction]++;
         cond_wait(&cond[task->priority], &bus_lock); // 0 = normal, 1 = priority
         waiting_dir[task->direction]--;
