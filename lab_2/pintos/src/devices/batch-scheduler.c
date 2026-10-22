@@ -253,7 +253,7 @@ void release_slot(const task_t* task) {
     // else
     //     cond_broadcast(&cond[NORMAL], &bus_lock);
 
-    // lock_release(&bus_lock);
+    lock_release(&bus_lock);
 }
 
 static bool can_enter(const task_t* task) {
