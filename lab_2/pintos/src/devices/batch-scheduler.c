@@ -234,13 +234,26 @@ void release_slot(const task_t* task) {
 
     lock_acquire(&bus_lock);
     active--;
+    if(waiting_priority_tasks[SEND] + waiting_priority_tasks[RECEIVE] > 0){
+        if(active == 0){
+            cond_broadcast(&cond[PRIORITY], &bus_lock);
+        }else{
+            cond_signal(&cond[PRIORITY], &bus_lock);
+        }
+    }else {
+        if(active == 0){
+            cond_broadcast(&cond[NORMAL], &bus_lock);
+        }else{
+            cond_signal(&cond[NORMAL], &bus_lock);
+        }
+    }
 
-    if (waiting_priority_tasks[SEND] + waiting_priority_tasks[RECEIVE] > 0)
-        cond_broadcast(&cond[PRIORITY], &bus_lock);
-    else
-        cond_broadcast(&cond[NORMAL], &bus_lock);
+    // if (waiting_priority_tasks[SEND] + waiting_priority_tasks[RECEIVE] > 0)
+    //     cond_broadcast(&cond[PRIORITY], &bus_lock);
+    // else
+    //     cond_broadcast(&cond[NORMAL], &bus_lock);
 
-    lock_release(&bus_lock);
+    // lock_release(&bus_lock);
 }
 
 static bool can_enter(const task_t* task) {
